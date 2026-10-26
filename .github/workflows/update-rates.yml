@@ -1,0 +1,38 @@
+name: Update rates
+
+on:
+  # Setiap hari jam 01:15 UTC (08:15 WIB)
+  schedule:
+    - cron: '15 1 * * *'
+  # Bisa dijalankan manual dari tab Actions
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-rates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Ambil kurs & tulis rates.json
+        run: node .github/scripts/update-rates.js
+
+      - name: Commit kalau ada perubahan
+        run: |
+          if [ -n "$(git status --porcelain rates.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add rates.json
+            git commit -m "chore: update rates.json"
+            git push
+          else
+            echo "rates.json tidak berubah, skip commit."
+          fi
