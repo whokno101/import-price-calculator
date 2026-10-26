@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<title>Kalkulator Harga Jastip</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#f4f5f7;
+    --card:#ffffff;
+    --text:#14161a;
+    --muted:#6b7280;
+    --border:#e3e6ea;
+    --accent:#1f6feb;
+    --accent-soft:#e8f0fe;
+    --danger:#d92d20;
+    --ok:#0f7b46;
+    --chip:#f1f3f5;
+    --shadow:0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1115;
+      --card:#181b21;
+      --text:#e8eaed;
+      --muted:#9aa3b2;
+      --border:#2a2f3a;
+      --accent:#6ea8fe;
+      --accent-soft:#1b2735;
+      --danger:#ff8a80;
+      --ok:#6bd69a;
+      --chip:#21262e;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-size:16px;
+    line-height:1.45;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:18px 14px 60px}
+  header.top{display:flex;align-items:flex-start;gap:10px;margin:6px 2px 16px}
+  header.top h1{font-size:20px;margin:0;letter-spacing:-.01em}
+  header.top p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+  .spacer{flex:1}
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:14px;
+    margin-bottom:14px;
+    box-shadow:var(--shadow);
+  }
+  .card h2{
+    font-size:13px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin:0 0 10px;font-weight:700;
+  }
+  .field{margin-bottom:12px}
+  .field:last-child{margin-bottom:0}
+  label{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
+  label .unit{font-weight:400;color:var(--muted)}
+  input,select{
+    width:100%;
+    font:inherit;
+    font-size:19px;
+    padding:12px 14px;
+    color:var(--text);
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    min-height:52px;
+    outline:none;
+    appearance:none;
+  }
+  select{font-size:17px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 20px) 24px,calc(100% - 14px) 24px;background-size:6px 6px,6px 6px;background-repeat:no-repeat;padding-right:38px}
+  input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  input.invalid{border-color:var(--danger)}
+  .grid2{display:grid;grid-template-columns:1fr;gap:12px}
+  @media (min-width:520px){ .grid2{grid-template-columns:1fr 1fr} }
+  .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+  .hint.warn{color:var(--danger)}
+  .hint.ok{color:var(--ok)}
+  .btn{
+    font:inherit;font-size:13px;font-weight:600;
+    padding:8px 12px;border-radius:10px;
+    border:1px solid var(--border);background:var(--chip);color:var(--text);
+    cursor:pointer;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.link{background:transparent;border:none;color:var(--accent);padding:6px 4px;text-decoration:underline}
+  .seg{display:flex;background:var(--chip);border:1px solid var(--border);border-radius:12px;padding:4px;gap:4px}
+  .seg button{
+    flex:1;font:inherit;font-size:15px;font-weight:600;
+    padding:10px 8px;border:none;border-radius:9px;background:transparent;color:var(--muted);cursor:pointer;
+  }
+  .seg button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+  /* results */
+  .results{display:grid;grid-template-columns:1fr;gap:14px}
+  @media (min-width:640px){ .results{grid-template-columns:1fr 1fr} }
+  .res h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);letter-spacing:.04em}
+  .total{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:2px 0 0}
+  .total.muted{font-size:17px;font-weight:600;color:var(--muted)}
+  .breakdown{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .note{font-size:12.5px;color:var(--danger);margin-top:8px;background:var(--chip);border-radius:8px;padding:8px 10px}
+  .rows{margin-top:12px;border-top:1px solid var(--border);padding-top:8px}
+  .rowitem{padding:9px 0;border-bottom:1px dashed var(--border)}
+  .rowitem:last-child{border-bottom:none}
+  .rowtop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .tag{font-size:12.5px;color:var(--muted);font-weight:600}
+  .price{font-size:19px;font-weight:700;white-space:nowrap}
+  .rowbot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px}
+  .untung{font-size:12.5px;color:var(--muted)}
+  .untung b{color:var(--ok);font-weight:700}
+  .copy{font:inherit;font-size:12px;font-weight:700;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--chip);color:var(--text);cursor:pointer}
+  .copy.done{background:var(--ok);border-color:var(--ok);color:#fff}
+  .empty{color:var(--muted);font-size:15px;font-weight:600;padding:6px 0}
+  details.all{margin-top:10px}
+  details.all summary{font-size:13px;color:var(--muted);cursor:pointer}
+  .ratelist{margin:8px 0 0;padding:0;list-style:none;font-size:13px}
+  .ratelist li{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border)}
+  .ratelist li:last-child{border-bottom:none}
+  .ratelist span.d{color:var(--muted);font-size:12px}
+  footer.foot{font-size:12px;color:var(--muted);margin:18px 4px;line-height:1.6}
+  #toast{
+    position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);
+    background:var(--text);color:var(--card);
+    padding:10px 16px;border-radius:999px;font-size:13px;font-weight:600;
+    opacity:0;pointer-events:none;transition:opacity .18s ease, transform .18s ease;
+    z-index:9;
+  }
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Kalkulator Harga Jastip</h1>
+      <p>Hitung modal &amp; harga jual — laut / udara</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="refreshBtn" type="button" title="Muat ulang kurs">Muat ulang kurs</button>
+  </header>
+
+  <section class="card">
+    <h2>Input Barang</h2>
+
+    <div class="field">
+      <label for="cur">Mata Uang</label>
+      <select id="cur">
+        <option value="CNY">RMB / Yuan China (CNY)</option>
+        <option value="THB">Baht Thailand (THB)</option>
+        <option value="KRW">Won Korea (KRW)</option>
+      </select>
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="price">Modal <span class="unit" id="curTag">(CNY)</span></label>
+        <input id="price" type="text" inputmode="decimal" autocomplete="off" placeholder="contoh: 10">
+      </div>
+      <div class="field">
+        <label for="rate">Kurs <span class="unit" id="curTag2">CNY &rarr; Rp</span></label>
+        <input id="rate" type="text" inputmode="decimal" autocomplete="off" placeholder="2735">
+      </div>
+    </div>
+    <p class="hint" id="rateStatus">Memuat kurs&hellip;</p>
+    <p class="hint" id="rateActions" style="display:none"></p>
+
+    <div class="field" style="margin-top:12px">
+      <label for="weight">Berat (gram) <span class="unit">— untuk ongkir udara</span></label>
+      <input id="weight" type="text" inputmode="decimal" autocomplete="off" placeholder="contoh: 200">
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="sea">Ongkir Laut <span class="unit">(Rp, per item)</span></label>
+        <input id="sea" type="text" inputmode="decimal" autocomplete="off" placeholder="opsional, contoh: 10000">
+      </div>
+      <div class="field">
+        <label for="air">Ongkir Udara per kg <span class="unit">(Rp)</span></label>
+        <input id="air" type="text" inputmode="decimal" autocomplete="off" placeholder="155000">
+      </div>
+    </div>
+    <p class="hint" id="inputWarn" style="display:none">Input negatif atau bukan angka diabaikan.</p>
+  </section>
+
+  <section class="card">
+    <h2>Harga Jual</h2>
+    <div class="field">
+      <label>Mode harga</label>
+      <div class="seg" id="mode" role="group" aria-label="Mode harga">
+        <button type="button" data-mode="margin" class="on">Margin</button>
+        <button type="button" data-mode="markup">Markup</button>
+      </div>
+      <p class="hint" id="modeHint">Margin: harga = modal &divide; (1 &minus; %). Untung dihitung dari harga jual.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="custom">Margin custom (%)</label>
+        <input id="custom" type="text" inputmode="decimal" autocomplete="off" placeholder="contoh: 40">
+      </div>
+      <div class="field">
+        <label for="round">Pembulatan harga</label>
+        <select id="round">
+          <option value="0">Tanpa pembulatan</option>
+          <option value="500">Naik ke kelipatan 500</option>
+          <option value="1000">Naik ke kelipatan 1000</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="results" id="results" aria-live="polite">
+    <div class="card res" id="seaCard"></div>
+    <div class="card res" id="airCard"></div>
+  </section>
+
+  <section class="card">
+    <h2>Semua Kurs</h2>
+    <ul class="ratelist" id="rateList"></ul>
+    <details class="all">
+      <summary>Catatan</summary>
+      <p class="hint">Kurs diambil otomatis dari Frankfurter API (data referensi ECB) saat halaman dibuka. Kurs bisa diketik manual dan akan disimpan di browser ini. Ongkir udara &amp; setelan juga tersimpan otomatis.</p>
+    </details>
+  </section>
+
+  <footer class="foot">
+    Kalkulator statis, tidak ada data yang dikirim ke server selain permintaan kurs publik.<br>
+    Hasil hanya estimasi — cek ulang ongkir &amp; kurs sebelum kirim penawaran.
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite">Tersalin</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ---------- Konstanta (ubah di sini untuk ganti kurs bawaan) ---------- */
+  var DEFAULT_RATES = { CNY: 2735, THB: 547, KRW: 12 };
+  var DEFAULT_AIR   = 155000;
+  var CUR_NAME      = { CNY: 'RMB (CNY)', THB: 'THB', KRW: 'KRW' };
+  var CURRENCIES    = ['CNY', 'THB', 'KRW'];
+  var STORE_KEY     = 'jastipCalc.v1';
+
+  /* ---------- Util ---------- */
+  var $ = function(id){ return document.getElementById(id); };
+  var idr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 });
+  var dateFmt = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  function rp(n){ return 'Rp' + idr.format(Math.round(n)); }
+  function num(n){ return idr.format(Math.round(n)); }
+
+  function fmtDate(iso){
+    if(!iso) return '';
+    var d = new Date(iso);
+    if(isNaN(d.getTime())) return iso;
+    return dateFmt.format(d);
+  }
+
+  // Parsing angka ala Indonesia: "." pemisah ribuan, "," desimal.
+  // Nilai negatif / bukan angka -> null (diabaikan).
+  function parseNum(raw){
+    if(raw === null || raw === undefined) return null;
+    var s = String(raw).trim();
+    if(!s) return null;
+    s = s.replace(/[^\d.,\-]/g, '');
+    if(!s) return null;
+
+    var lastComma = s.lastIndexOf(',');
+    var lastDot   = s.lastIndexOf('.');
+    if(lastComma > -1 && lastDot > -1){
+      if(lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+      else s = s.replace(/,/g, '');
+    } else if(lastComma > -1){
+      s = s.replace(',', '.');
+    } else if(lastDot > -1){
+      var parts = s.split('.');
+      if(parts.length > 2 || parts[parts.length - 1].length === 3) s = parts.join('');
+    }
+    if(s === '' || s === '-' || s === '.' || s === ',') return null;
+    var v = Number(s);
+    if(!isFinite(v) || v < 0) return null;
+    return v;
+  }
+
+  function isBad(raw){
+    return String(raw).trim() !== '' && parseNum(raw) === null;
+  }
+
+  /* ---------- State & storage ---------- */
+  var rates = { CNY: {value:null, date:'', manual:false, auto:null},
+                THB: {value:null, date:'', manual:false, auto:null},
+                KRW: {value:null, date:'', manual:false, auto:null} };
+  var state = { cur:'CNY', mode:'margin', round:0, custom:null };
+
+  function loadStore(){
+    try{
+      var raw = localStorage.getItem(STORE_KEY);
+      if(!raw) return;
+      var o = JSON.parse(raw);
+      if(!o || typeof o !== 'object') return;
+      CURRENCIES.forEach(function(c){
+        var r = o.rates && o.rates[c];
+        if(r && typeof r.value === 'number' && isFinite(r.value) && r.value > 0){
+          rates[c] = { value:r.value, date:(typeof r.date === 'string' ? r.date : ''),
+                       manual:!!r.manual,
+                       auto:(r.auto && typeof r.auto.value === 'number' ? {value:r.auto.value, date:r.auto.date || ''} : null) };
+        }
+      });
+      if(typeof o.air === 'number' && isFinite(o.air) && o.air >= 0) state.air = o.air;
+      if(o.mode === 'margin' || o.mode === 'markup') state.mode = o.mode;
+      if(o.round === 0 || o.round === 500 || o.round === 1000) state.round = o.round;
+      if(typeof o.custom === 'number' && isFinite(o.custom) && o.custom >= 0) state.custom = o.custom;
+      if(CUR_NAME[o.cur]) state.cur = o.cur;
+    }catch(e){ /* localStorage bisa diblokir -> abaikan */ }
+  }
+  state.air = null;
+
+  function saveStore(){
+    try{
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        rates: rates, air: state.air, mode: state.mode,
+        round: state.round, custom: state.custom, cur: state.cur
+      }));
+    }catch(e){ /* quota / private mode -> abaikan */ }
+  }
+
+  function rateFor(c){
+    var r = rates[c];
+    if(r && typeof r.value === 'number' && r.value > 0) return r.value;
+    return DEFAULT_RATES[c];
+  }
+
+  /* ---------- Rate input sync ---------- */
+  function syncRateInput(){
+    if(document.activeElement === $('rate')) return;
+    $('rate').value = String(Math.round(rateFor(state.cur) * 100) / 100);
+  }
+
+  function updateRateUI(){
+    var r = rates[state.cur];
+    var st = $('rateStatus');
+    var act = $('rateActions');
+    act.innerHTML = '';
+    act.style.display = 'none';
+
+    if(parseNum($('rate').value) === null){
+      st.className = 'hint warn';
+      st.textContent = 'Kurs kosong, memakai kurs ' + (r && r.value ? 'tersimpan' : 'bawaan') + ' ' + rp(rateFor(state.cur)) + '.';
+    } else if(r.manual){
+      st.className = 'hint';
+      st.textContent = r.auto && r.auto.value
+        ? 'Kurs manual. Kurs otomatis: ' + rp(r.auto.value) + ' (update ' + (fmtDate(r.auto.date) || '-') + ').'
+        : 'Kurs manual (diisi sendiri).';
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn link';
+      b.textContent = 'Pakai kurs otomatis';
+      b.addEventListener('click', function(){
+        r.manual = false;
+        if(r.auto && r.auto.value){ r.value = r.auto.value; r.date = r.auto.date || ''; }
+        else { r.value = null; r.date = ''; }
+        saveStore(); syncRateInput(); updateRateUI(); render();
+      });
+      act.appendChild(b); act.style.display = 'block';
+    } else if(r.date){
+      st.className = 'hint ok';
+      st.textContent = 'Kurs otomatis, update ' + fmtDate(r.date) + '.';
+    } else {
+      st.className = 'hint';
+      st.textContent = 'Kurs bawaan ' + rp(DEFAULT_RATES[state.cur]) + ' (belum berhasil ambil kurs online).';
+    }
+
+    var list = $('rateList');
+    list.innerHTML = '';
+    CURRENCIES.forEach(function(c){
+      var rr = rates[c];
+      var li = document.createElement('li');
+      var left = document.createElement('span');
+      left.textContent = CUR_NAME[c] + ' → Rp' + num(rateFor(c)) + (rr.manual ? ' (manual)' : '');
+      var right = document.createElement('span');
+      right.className = 'd';
+      right.textContent = rr.date ? fmtDate(rr.date) : 'bawaan';
+      li.appendChild(left); li.appendChild(right);
+      list.appendChild(li);
+    });
+  }
+
+  /* ---------- Ambil kurs ---------- */
+  var fetchFailed = false;
+  function refreshRates(){
+    $('rateStatus').className = 'hint';
+    $('rateStatus').textContent = 'Memuat kurs terbaru…';
+    var any = false, ok = false;
+    var jobs = CURRENCIES.map(function(c){
+      return fetch('https://api.frankfurter.app/latest?from=' + c + '&to=IDR', { cache:'no-store' })
+        .then(function(res){ if(!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+        .then(function(d){
+          var v = d && d.rates && d.rates.IDR;
+          if(typeof v !== 'number' || !isFinite(v) || v <= 0) throw new Error('data tidak valid');
+          var r = rates[c];
+          if(r.manual){ r.auto = { value:v, date:d.date || '' }; }
+          else { r.value = v; r.date = d.date || ''; r.auto = { value:v, date:d.date || '' }; }
+          ok = true;
+        })
+        .catch(function(){ any = true; });
+    });
+    return Promise.all(jobs).then(function(){
+      fetchFailed = !ok && any;
+      saveStore();
+      syncRateInput();
+      updateRateUI();
+      render();
+      return ok;
+    });
+  }
+
+  /* ---------- Perhitungan ---------- */
+  function levels(){
+    var arr = [20, 25, 30];
+    var c = parseNum($('custom').value);
+    if(c !== null && c > 0) arr.push(c);
+    return arr;
+  }
+
+  function roundPrice(v){
+    if(!state.round) return Math.round(v);
+    return Math.ceil(v / state.round) * state.round;
+  }
+
+  function rowsHtml(cost, via){
+    var mode = state.mode;
+    var modeLabel = mode === 'margin' ? 'Margin' : 'Markup';
+    return levels().map(function(lvl){
+      var value;
+      if(mode === 'margin'){
+        if(lvl >= 100){
+          return '<div class="rowitem"><div class="rowtop"><span class="tag">' + modeLabel + ' ' + lvl + '%</span>' +
+                 '<span class="price">—</span></div><div class="rowbot"><span class="untung">margin harus di bawah 100%</span></div></div>';
+        }
+        value = cost / (1 - lvl / 100);
+      } else {
+        value = cost * (1 + lvl / 100);
+      }
+      var p = roundPrice(value);
+      var untung = p - cost;
+      var quote = 'Harga: ' + rp(p) + ' (via ' + via + ')';
+      return '<div class="rowitem">' +
+        '<div class="rowtop"><span class="tag">' + modeLabel + ' ' + (Math.round(lvl * 100) / 100) + '%</span>' +
+        '<span class="price">' + rp(p) + '</span></div>' +
+        '<div class="rowbot"><span class="untung">Untung <b>' + rp(untung) + '</b></span>' +
+        '<button type="button" class="copy" data-quote="' + quote.replace(/"/g, '&quot;') + '">Salin</button></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function columnHtml(opts){
+    var h = '<h3><span class="badge">' + opts.badge + '</span>' + opts.title + '</h3>';
+    if(!opts.ready){
+      h += '<p class="total muted">' + opts.message + '</p>';
+      if(opts.extra) h += '<p class="breakdown">' + opts.extra + '</p>';
+      return h;
+    }
+    h += '<p class="total">' + rp(opts.cost) + '</p>';
+    if(opts.breakdown) h += '<p class="breakdown">' + opts.breakdown + '</p>';
+    if(opts.note) h += '<p class="note">' + opts.note + '</p>';
+    h += '<div class="rows">' + rowsHtml(opts.cost, opts.via) + '</div>';
+    return h;
+  }
+
+  function render(){
+    var price   = parseNum($('price').value);
+    var rateIn  = parseNum($('rate').value);
+    var weight  = parseNum($('weight').value);
+    var seaFee  = parseNum($('sea').value);
+    var airRate = parseNum($('air').value);
+    var rate    = rateIn !== null ? rateIn : rateFor(state.cur);
+
+    ['price','rate','weight','sea','air','custom'].forEach(function(id){
+      $(id).classList.toggle('invalid', isBad($(id).value));
+    });
+    var anyBad = ['price','rate','weight','sea','air','custom'].some(function(id){ return isBad($(id).value); });
+    $('inputWarn').style.display = anyBad ? 'block' : 'none';
+
+    var base = price !== null ? price * rate : null;
+
+    // Laut
+    var seaCard;
+    if(base === null){
+      seaCard = { badge:'LAUT', title:'Total Modal Laut', ready:false, message:'Isi modal dulu',
+                  extra:'Masukkan harga barang dalam ' + CUR_NAME[state.cur] + '.' };
+    } else {
+      var seaCost = base + (seaFee || 0);
+      seaCard = {
+        badge:'LAUT', title:'Total Modal Laut', ready:true, via:'laut', cost:seaCost,
+        breakdown:'Modal ' + rp(base) + (seaFee !== null ? ' + ongkir laut ' + rp(seaFee) : ''),
+        note: seaFee === null ? 'Ongkir laut belum diisi — total ini BELUM termasuk ongkir laut.' : ''
+      };
+    }
+
+    // Udara
+    var airCard;
+    if(base === null){
+      airCard = { badge:'UDARA', title:'Total Modal Udara', ready:false, message:'Isi modal dulu',
+                  extra:'Masukkan harga barang dalam ' + CUR_NAME[state.cur] + '.' };
+    } else if(weight === null){
+      airCard = { badge:'UDARA', title:'Total Modal Udara', ready:false, message:'Isi berat dulu',
+                  extra:'Ongkir udara dihitung dari berat (gram).' };
+    } else if(airRate === null){
+      airCard = { badge:'UDARA', title:'Total Modal Udara', ready:false, message:'Isi tarif ongkir udara',
+                  extra:'Default ' + rp(DEFAULT_AIR) + ' per kg.' };
+    } else {
+      var kg = weight / 1000;
+      var airShip = kg * airRate;
+      var airCost = base + airShip;
+      airCard = {
+        badge:'UDARA', title:'Total Modal Udara', ready:true, via:'udara', cost:airCost,
+        breakdown:'Modal ' + rp(base) + ' + ongkir udara ' + rp(airShip) +
+                  ' (' + (Math.round(kg * 1000) / 1000) + ' kg × ' + rp(airRate) + ')'
+      };
+    }
+
+    $('seaCard').innerHTML = columnHtml(seaCard);
+    $('airCard').innerHTML = columnHtml(airCard);
+  }
+
+  /* ---------- Salin ---------- */
+  var toastTimer = null;
+  function toast(msg){
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1400);
+  }
+  function copyText(text){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function(resolve, reject){
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch(e){ ok = false; }
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('copy gagal'));
+    });
+  }
+  $('results').addEventListener('click', function(ev){
+    var btn = ev.target.closest ? ev.target.closest('button.copy') : null;
+    if(!btn) return;
+    var text = btn.getAttribute('data-quote');
+    copyText(text).then(function(){
+      btn.classList.add('done'); btn.textContent = 'Tersalin';
+      toast('Tersalin: ' + text);
+      setTimeout(function(){ btn.classList.remove('done'); btn.textContent = 'Salin'; }, 1400);
+    }).catch(function(){
+      toast('Gagal menyalin');
+    });
+  });
+
+  /* ---------- Event ---------- */
+  ['price','rate','weight','sea','air','custom'].forEach(function(id){
+    $(id).addEventListener('input', function(){
+      if(id === 'rate'){
+        var v = parseNum($('rate').value);
+        if(v !== null){
+          rates[state.cur].value = v;
+          rates[state.cur].manual = true;
+          saveStore();
+        }
+        updateRateUI();
+      }
+      if(id === 'air'){
+        var a = parseNum($('air').value);
+        state.air = a; saveStore();
+      }
+      if(id === 'custom'){
+        state.custom = parseNum($('custom').value); saveStore();
+      }
+      render();
+    });
+    $(id).addEventListener('blur', function(){
+      if(id === 'rate'){ syncRateInput(); updateRateUI(); render(); }
+    });
+  });
+
+  $('cur').addEventListener('change', function(){
+    state.cur = $('cur').value;
+    saveStore();
+    $('curTag').textContent = '(' + state.cur + ')';
+    $('curTag2').textContent = state.cur + ' → Rp';
+    syncRateInput(); updateRateUI(); render();
+  });
+
+  $('mode').addEventListener('click', function(ev){
+    var b = ev.target.closest ? ev.target.closest('button[data-mode]') : null;
+    if(!b) return;
+    state.mode = b.getAttribute('data-mode');
+    saveStore();
+    Array.prototype.forEach.call($('mode').querySelectorAll('button'), function(x){
+      x.classList.toggle('on', x === b);
+    });
+    $('modeHint').innerHTML = state.mode === 'margin'
+      ? 'Margin: harga = modal &divide; (1 &minus; %). Untung dihitung dari harga jual.'
+      : 'Markup: harga = modal &times; (1 + %). Untung dihitung dari modal.';
+    render();
+  });
+
+  $('round').addEventListener('change', function(){
+    state.round = Number($('round').value) || 0;
+    saveStore(); render();
+  });
+
+  $('refreshBtn').addEventListener('click', function(){
+    refreshRates().then(function(ok){
+      toast(ok ? 'Kurs diperbarui' : 'Gagal memuat kurs, memakai kurs tersimpan');
+    });
+  });
+
+  /* ---------- Init ---------- */
+  loadStore();
+  $('cur').value = state.cur;
+  $('curTag').textContent = '(' + state.cur + ')';
+  $('curTag2').textContent = state.cur + ' → Rp';
+  $('air').value = state.air !== null ? String(state.air) : String(DEFAULT_AIR);
+  if(state.custom !== null) $('custom').value = String(state.custom);
+  $('round').value = String(state.round);
+  Array.prototype.forEach.call($('mode').querySelectorAll('button'), function(x){
+    x.classList.toggle('on', x.getAttribute('data-mode') === state.mode);
+  });
+  $('modeHint').innerHTML = state.mode === 'margin'
+    ? 'Margin: harga = modal &divide; (1 &minus; %). Untung dihitung dari harga jual.'
+    : 'Markup: harga = modal &times; (1 + %). Untung dihitung dari modal.';
+  syncRateInput();
+  updateRateUI();
+  render();
+  refreshRates();
+})();
+</script>
+</body>
+</html>
