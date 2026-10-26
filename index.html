@@ -95,6 +95,7 @@
     cursor:pointer;
   }
   .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.6;cursor:default}
   .btn.link{background:transparent;border:none;color:var(--accent);padding:6px 4px;text-decoration:underline}
   .seg{display:flex;background:var(--chip);border:1px solid var(--border);border-radius:12px;padding:4px;gap:4px}
   .seg button{
@@ -129,6 +130,14 @@
   .ratelist li{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--border)}
   .ratelist li:last-child{border-bottom:none}
   .ratelist span.d{color:var(--muted);font-size:12px}
+  .ratelist span.ok{color:var(--ok);font-size:12px}
+  .ratelist span.err{color:var(--danger);font-size:12px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+  .modal[hidden]{display:none}
+  .modalbox{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;width:100%;max-width:420px;box-shadow:var(--shadow)}
+  .modalmsg{margin:0 0 10px;font-size:14px;font-weight:600}
+  .modalinput{width:100%;font:inherit;font-size:16px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);margin-bottom:12px}
+  .modalactions{display:flex;justify-content:flex-end}
   footer.foot{font-size:12px;color:var(--muted);margin:18px 4px;line-height:1.6}
   #toast{
     position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);
@@ -229,9 +238,19 @@
   <section class="card">
     <h2>Semua Kurs</h2>
     <ul class="ratelist" id="rateList"></ul>
+    <p class="hint" id="sourceLine"></p>
     <details class="all">
       <summary>Catatan</summary>
-      <p class="hint">Kurs diambil otomatis dari Frankfurter API (data referensi ECB) saat halaman dibuka. Kurs bisa diketik manual dan akan disimpan di browser ini. Ongkir udara &amp; setelan juga tersimpan otomatis.</p>
+      <p class="hint">Kurs diambil otomatis saat halaman dibuka, berurutan dari Frankfurter → ExchangeRate-API → currency-api (jsDelivr + mirror). Kalau semua gagal, dipakai kurs tersimpan, lalu kurs bawaan. Kurs bisa diketik manual dan akan disimpan di browser ini. Ongkir udara &amp; setelan juga tersimpan otomatis.</p>
+    </details>
+  </section>
+
+  <section class="card">
+    <details class="all" id="diagBox">
+      <summary>Info teknis</summary>
+      <ul class="ratelist" id="diagList"></ul>
+      <p class="hint" id="diagSummary"></p>
+      <p class="hint">Urutan sumber: rates.json (repo) → Frankfurter → ExchangeRate-API → currency-api (jsDelivr) → mirror. Tekan "Muat ulang kurs" untuk mencoba ulang semua sumber.</p>
     </details>
   </section>
 
@@ -242,6 +261,16 @@
 </div>
 
 <div id="toast" role="status" aria-live="polite">Tersalin</div>
+
+<div id="copyModal" class="modal" hidden>
+  <div class="modalbox">
+    <p class="modalmsg">Tekan lama / Ctrl+C untuk menyalin</p>
+    <input id="copyInput" class="modalinput" type="text" readonly>
+    <div class="modalactions">
+      <button class="btn" id="copyClose" type="button">Tutup</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -254,6 +283,10 @@
   var CURRENCIES    = ['CNY', 'THB', 'KRW'];
   var STORE_KEY     = 'jastipCalc.v1';
 
+  // Batas kewajaran kurs (Rp per 1 unit). Di luar ini -> sumber dianggap gagal.
+  var RATE_RANGE    = { CNY: [1500, 5000], THB: [300, 800], KRW: [5, 20] };
+  var FETCH_TIMEOUT = 8000;
+
   /* ---------- Util ---------- */
   var $ = function(id){ return document.getElementById(id); };
   var idr = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 });
@@ -261,6 +294,17 @@
 
   function rp(n){ return 'Rp' + idr.format(Math.round(n)); }
   function num(n){ return idr.format(Math.round(n)); }
+
+  // Tampilan kurs: CNY & THB dibulatkan ke Rp utuh, KRW ke 2 desimal (nilainya kecil).
+  function rateText(c, v){
+    if(c === 'KRW'){
+      return new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(v);
+    }
+    return idr.format(Math.round(v));
+  }
+  function roundRate(c, v){
+    return c === 'KRW' ? Math.round(v * 100) / 100 : Math.round(v);
+  }
 
   function fmtDate(iso){
     if(!iso) return '';
@@ -304,6 +348,11 @@
                 THB: {value:null, date:'', manual:false, auto:null},
                 KRW: {value:null, date:'', manual:false, auto:null} };
   var state = { cur:'CNY', mode:'margin', round:0, custom:null };
+  var lastSource = '';      // nama sumber kurs yang terakhir berhasil
+  var lastSourceDate = '';  // tanggal dari sumber tersebut
+  var fetchFailed = false;  // semua sumber gagal pada percobaan terakhir
+  var loading = false;
+  var diag = [];            // status tiap sumber untuk panel "Info teknis"
 
   function loadStore(){
     try{
@@ -311,6 +360,7 @@
       if(!raw) return;
       var o = JSON.parse(raw);
       if(!o || typeof o !== 'object') return;
+      if(typeof o.source === 'string') lastSource = o.source;
       CURRENCIES.forEach(function(c){
         var r = o.rates && o.rates[c];
         if(r && typeof r.value === 'number' && isFinite(r.value) && r.value > 0){
@@ -332,7 +382,8 @@
     try{
       localStorage.setItem(STORE_KEY, JSON.stringify({
         rates: rates, air: state.air, mode: state.mode,
-        round: state.round, custom: state.custom, cur: state.cur
+        round: state.round, custom: state.custom, cur: state.cur,
+        source: lastSource
       }));
     }catch(e){ /* quota / private mode -> abaikan */ }
   }
@@ -356,30 +407,40 @@
     act.innerHTML = '';
     act.style.display = 'none';
 
-    if(parseNum($('rate').value) === null){
+    if(loading){
+      st.className = 'hint';
+      st.textContent = 'Memuat kurs terbaru…';
+    } else if(parseNum($('rate').value) === null){
       st.className = 'hint warn';
-      st.textContent = 'Kurs kosong, memakai kurs ' + (r && r.value ? 'tersimpan' : 'bawaan') + ' ' + rp(rateFor(state.cur)) + '.';
+      st.textContent = 'Kurs kosong, memakai kurs ' + (r && r.value ? 'tersimpan' : 'bawaan') +
+                       ' Rp' + rateText(state.cur, rateFor(state.cur)) + '.';
     } else if(r.manual){
       st.className = 'hint';
       st.textContent = r.auto && r.auto.value
-        ? 'Kurs manual. Kurs otomatis: ' + rp(r.auto.value) + ' (update ' + (fmtDate(r.auto.date) || '-') + ').'
+        ? 'Kurs manual. Kurs online: Rp' + rateText(state.cur, r.auto.value) +
+          ' · sumber: ' + (lastSource || '-') + ' · ' + (fmtDate(r.auto.date) || '-') + '.'
         : 'Kurs manual (diisi sendiri).';
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'btn link';
-      b.textContent = 'Pakai kurs otomatis';
+      b.textContent = 'Pakai kurs online';
       b.addEventListener('click', function(){
         r.manual = false;
         if(r.auto && r.auto.value){ r.value = r.auto.value; r.date = r.auto.date || ''; }
-        else { r.value = null; r.date = ''; }
+        else { r.value = null; r.date = ''; refreshRates(); }
         saveStore(); syncRateInput(); updateRateUI(); render();
       });
       act.appendChild(b); act.style.display = 'block';
+    } else if(fetchFailed){
+      st.className = 'hint warn';
+      st.textContent = 'Gagal memuat kurs, memakai kurs ' + (r && r.value ? 'tersimpan' : 'bawaan') +
+                       ' Rp' + rateText(state.cur, rateFor(state.cur));
     } else if(r.date){
       st.className = 'hint ok';
-      st.textContent = 'Kurs otomatis, update ' + fmtDate(r.date) + '.';
+      st.textContent = 'Kurs online: Rp' + rateText(state.cur, rateFor(state.cur)) +
+                       ' · sumber: ' + (lastSource || '-') + ' · ' + fmtDate(r.date);
     } else {
       st.className = 'hint';
-      st.textContent = 'Kurs bawaan ' + rp(DEFAULT_RATES[state.cur]) + ' (belum berhasil ambil kurs online).';
+      st.textContent = 'Kurs bawaan Rp' + rateText(state.cur, DEFAULT_RATES[state.cur]) + '.';
     }
 
     var list = $('rateList');
@@ -388,41 +449,231 @@
       var rr = rates[c];
       var li = document.createElement('li');
       var left = document.createElement('span');
-      left.textContent = CUR_NAME[c] + ' → Rp' + num(rateFor(c)) + (rr.manual ? ' (manual)' : '');
+      left.textContent = CUR_NAME[c] + ' → Rp' + rateText(c, rateFor(c)) + (rr.manual ? ' (manual)' : '');
       var right = document.createElement('span');
       right.className = 'd';
       right.textContent = rr.date ? fmtDate(rr.date) : 'bawaan';
       li.appendChild(left); li.appendChild(right);
       list.appendChild(li);
     });
+
+    var sl = $('sourceLine');
+    if(sl){
+      sl.textContent = lastSource
+        ? 'Sumber kurs: ' + lastSource + (lastSourceDate ? ' · ' + fmtDate(lastSourceDate) : '')
+        : (fetchFailed ? 'Sumber kurs: tidak ada yang berhasil dimuat (lihat console).' : '');
+    }
   }
 
-  /* ---------- Ambil kurs ---------- */
-  var fetchFailed = false;
-  function refreshRates(){
-    $('rateStatus').className = 'hint';
-    $('rateStatus').textContent = 'Memuat kurs terbaru…';
-    var any = false, ok = false;
-    var jobs = CURRENCIES.map(function(c){
-      return fetch('https://api.frankfurter.app/latest?from=' + c + '&to=IDR', { cache:'no-store' })
-        .then(function(res){ if(!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
-        .then(function(d){
-          var v = d && d.rates && d.rates.IDR;
-          if(typeof v !== 'number' || !isFinite(v) || v <= 0) throw new Error('data tidak valid');
-          var r = rates[c];
-          if(r.manual){ r.auto = { value:v, date:d.date || '' }; }
-          else { r.value = v; r.date = d.date || ''; r.auto = { value:v, date:d.date || '' }; }
-          ok = true;
-        })
-        .catch(function(){ any = true; });
+  /* ---------- Ambil kurs online (berantai: sumber 1 -> 2 -> 3 -> mirror) ---------- */
+
+  // fetch JSON dengan timeout 8 detik (AbortController).
+  function fetchJson(url){
+    var ctrl = null, opt = { cache: 'no-store' };
+    if(typeof AbortController === 'function'){
+      ctrl = new AbortController();
+      opt.signal = ctrl.signal;
+    }
+    var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, FETCH_TIMEOUT);
+    var clear = function(){ clearTimeout(timer); };
+    return fetch(url, opt).then(function(res){
+      clear();
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }, function(e){
+      clear();
+      if(e && e.name === 'AbortError') throw new Error('timeout setelah ' + FETCH_TIMEOUT + 'ms');
+      throw e;
     });
-    return Promise.all(jobs).then(function(){
-      fetchFailed = !ok && any;
-      saveStore();
-      syncRateInput();
+  }
+
+  // Semua sumber memberi kurs IDR -> mata uang asing, jadi Rp per 1 unit = 1 / nilai.
+  function invert(obj){
+    var out = {};
+    CURRENCIES.forEach(function(c){
+      var v = Number(obj[c]);
+      out[c] = (typeof v === 'number' && isFinite(v) && v > 0) ? 1 / v : NaN;
+    });
+    return out;
+  }
+
+  // Validasi: angka terbatas & positif, lalu dalam rentang wajar.
+  function normalizeRates(src){
+    var out = {}, c, v, range;
+    for(var i = 0; i < CURRENCIES.length; i++){
+      c = CURRENCIES[i];
+      v = src[c];
+      if(typeof v !== 'number' || !isFinite(v) || v <= 0){
+        throw new Error(c + ': nilai tidak valid (' + v + ')');
+      }
+      range = RATE_RANGE[c];
+      if(v < range[0] || v > range[1]){
+        throw new Error(c + ': Rp' + rateText(c, v) + ' di luar rentang wajar ' + range[0] + '–' + range[1]);
+      }
+      out[c] = roundRate(c, v);
+    }
+    return out;
+  }
+
+  function parseFawaz(d){
+    var r = d && d.idr;
+    if(!r) throw new Error('format tidak dikenal');
+    return { rates: normalizeRates(invert({ CNY: r.cny, THB: r.thb, KRW: r.krw })), date: d.date || '' };
+  }
+
+  var SOURCES = [
+    {
+      // 1) Same-origin rates.json, ditulis tiap hari oleh GitHub Actions.
+      name: 'rates.json (repo)',
+      url: function(){ return 'rates.json?t=' + Date.now(); },
+      parse: function(d){
+        if(!d || !d.rates) throw new Error('format tidak dikenal');
+        // rates.json sudah berisi "Rp per 1 unit", tidak perlu dibalik.
+        return {
+          rates: normalizeRates({ CNY: d.rates.CNY, THB: d.rates.THB, KRW: d.rates.KRW }),
+          date: d.date || '',
+          source: d.source || ''
+        };
+      }
+    },
+    {
+      name: 'Frankfurter',
+      url: 'https://api.frankfurter.dev/v1/latest?base=IDR&symbols=CNY,THB,KRW',
+      parse: function(d){
+        if(!d || !d.rates) throw new Error('format tidak dikenal');
+        return { rates: normalizeRates(invert(d.rates)), date: d.date || '' };
+      }
+    },
+    {
+      name: 'ExchangeRate-API',
+      url: 'https://open.er-api.com/v6/latest/IDR',
+      parse: function(d){
+        if(!d || d.result !== 'success' || !d.rates) throw new Error('result = ' + (d && d.result));
+        return { rates: normalizeRates(invert(d.rates)), date: d.time_last_update_utc || '' };
+      }
+    },
+    {
+      name: 'currency-api (jsDelivr)',
+      url: 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/idr.json',
+      parse: parseFawaz
+    },
+    {
+      name: 'currency-api (mirror)',
+      url: 'https://latest.currency-api.pages.dev/v1/currencies/idr.json',
+      parse: parseFawaz
+    }
+  ];
+
+  function trySource(src){
+    var url = typeof src.url === 'function' ? src.url() : src.url;
+    var t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    var elapsed = function(){
+      var t1 = (window.performance && performance.now) ? performance.now() : Date.now();
+      return Math.max(0, Math.round(t1 - t0));
+    };
+    return fetchJson(url).then(function(d){
+      var res = src.parse(d);
+      if(!res || !res.rates) throw new Error('nilai kurs kosong');
+      diag.push({ name: src.name, ok: true, msg: '', ms: elapsed() });
+      return res;
+    }).catch(function(e){
+      var msg = (e && e.message) ? e.message : String(e);
+      console.error('[kurs] ' + src.name + ' gagal:', msg);
+      diag.push({ name: src.name, ok: false, msg: msg, ms: elapsed() });
+      throw e;
+    });
+  }
+
+  // Coba sumber satu per satu, berhenti di yang pertama sukses.
+  function fetchRatesChain(){
+    diag = [];
+    var i = 0;
+    function next(){
+      if(i >= SOURCES.length) return Promise.reject(new Error('semua sumber kurs gagal'));
+      var src = SOURCES[i++];
+      return trySource(src).then(
+        function(res){ return { source: src.name, res: res }; },
+        function(){ return next(); }
+      );
+    }
+    return next();
+  }
+
+  function renderDiag(){
+    var box = $('diagList');
+    var sum = $('diagSummary');
+    if(!box) return;
+    box.innerHTML = '';
+    if(!diag.length){
+      var li0 = document.createElement('li');
+      li0.innerHTML = '<span>Belum ada percobaan memuat kurs</span><span class="d">-</span>';
+      box.appendChild(li0);
+    } else {
+      diag.forEach(function(d){
+        var li = document.createElement('li');
+        var a = document.createElement('span');
+        a.textContent = d.name;
+        var b = document.createElement('span');
+        b.className = d.ok ? 'ok' : 'err';
+        b.textContent = (d.ok ? 'OK' : d.msg) + ' · ' + d.ms + ' ms';
+        li.appendChild(a); li.appendChild(b);
+        box.appendChild(li);
+      });
+    }
+    if(sum){
+      sum.textContent = lastSource
+        ? 'Dipakai: ' + lastSource + (lastSourceDate ? ' · ' + fmtDate(lastSourceDate) : '')
+        : (fetchFailed ? 'Tidak ada sumber yang berhasil; memakai kurs tersimpan / bawaan.' : '');
+    }
+  }
+
+  function applyOnlineRates(res, sourceName){
+    if(res.source) sourceName = sourceName + ' · ' + res.source;
+    CURRENCIES.forEach(function(c){
+      var r = rates[c];
+      var online = { value: res.rates[c], date: res.date || '' };
+      r.auto = online;                       // selalu simpan nilai online terakhir
+      if(!r.manual){                         // jangan timpa kurs ketikan manual
+        r.value = online.value;
+        r.date = online.date;
+      }
+    });
+    lastSource = sourceName;
+    lastSourceDate = res.date || '';
+    fetchFailed = false;
+    saveStore();
+    syncRateInput();
+    updateRateUI();
+    renderDiag();
+    render();
+  }
+
+  function setRateLoading(on){
+    loading = on;
+    var b = $('refreshBtn');
+    b.disabled = on;
+    b.textContent = on ? 'Memuat…' : 'Muat ulang kurs';
+    if(on){
+      $('rateStatus').className = 'hint';
+      $('rateStatus').textContent = 'Memuat kurs terbaru…';
+    }
+  }
+
+  function refreshRates(){
+    if(loading) return Promise.resolve(false);
+    setRateLoading(true);
+    return fetchRatesChain().then(function(done){
+      setRateLoading(false);
+      applyOnlineRates(done.res, done.source);
+      return true;
+    }, function(e){
+      setRateLoading(false);
+      console.error('[kurs] ' + ((e && e.message) ? e.message : e) + ' — memakai kurs tersimpan/bawaan');
+      fetchFailed = true;   // rates[] tetap berisi kurs tersimpan, rateFor() fallback ke DEFAULT_RATES
       updateRateUI();
+      renderDiag();
       render();
-      return ok;
+      return false;
     });
   }
 
@@ -544,31 +795,65 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1400);
   }
-  function copyText(text){
-    if(navigator.clipboard && navigator.clipboard.writeText){
-      return navigator.clipboard.writeText(text);
-    }
+  // Fallback 2: textarea tersembunyi + execCommand (untuk konteks non-https).
+  function legacyCopy(text){
     return new Promise(function(resolve, reject){
       var ta = document.createElement('textarea');
-      ta.value = text; ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select();
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.width = '1px';
+      ta.style.height = '1px';
+      ta.style.opacity = '0';
+      ta.style.pointerEvents = 'none';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      try { ta.setSelectionRange(0, text.length); } catch(e){}
       var ok = false;
       try { ok = document.execCommand('copy'); } catch(e){ ok = false; }
       document.body.removeChild(ta);
-      ok ? resolve() : reject(new Error('copy gagal'));
+      ok ? resolve() : reject(new Error('execCommand copy gagal'));
     });
   }
+
+  // 1) Clipboard API (butuh secure context) -> 2) execCommand -> 3) modal salin manual.
+  function copyText(text){
+    if(window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(text).catch(function(e){
+        console.error('[salin] clipboard API gagal:', (e && e.message) ? e.message : e);
+        return legacyCopy(text);
+      });
+    }
+    return legacyCopy(text);
+  }
+
+  function openCopyModal(text){
+    var m = $('copyModal');
+    var i = $('copyInput');
+    i.value = text;
+    m.hidden = false;
+    i.focus();
+    try { i.setSelectionRange(0, text.length); } catch(e){}
+    i.select();
+  }
+  $('copyClose').addEventListener('click', function(){ $('copyModal').hidden = true; });
+  $('copyModal').addEventListener('click', function(ev){
+    if(ev.target === $('copyModal')) $('copyModal').hidden = true;
+  });
+
   $('results').addEventListener('click', function(ev){
     var btn = ev.target.closest ? ev.target.closest('button.copy') : null;
     if(!btn) return;
     var text = btn.getAttribute('data-quote');
     copyText(text).then(function(){
-      btn.classList.add('done'); btn.textContent = 'Tersalin';
+      btn.classList.add('done'); btn.textContent = 'Tersalin ✓';
       toast('Tersalin: ' + text);
-      setTimeout(function(){ btn.classList.remove('done'); btn.textContent = 'Salin'; }, 1400);
-    }).catch(function(){
-      toast('Gagal menyalin');
+      setTimeout(function(){ btn.classList.remove('done'); btn.textContent = 'Salin'; }, 1600);
+    }).catch(function(e){
+      console.error('[salin] semua cara gagal:', (e && e.message) ? e.message : e);
+      openCopyModal(text);
     });
   });
 
@@ -627,7 +912,7 @@
 
   $('refreshBtn').addEventListener('click', function(){
     refreshRates().then(function(ok){
-      toast(ok ? 'Kurs diperbarui' : 'Gagal memuat kurs, memakai kurs tersimpan');
+      toast(ok ? 'Kurs diperbarui (' + lastSource + ')' : 'Gagal memuat kurs, memakai kurs tersimpan');
     });
   });
 
@@ -647,6 +932,7 @@
     : 'Markup: harga = modal &times; (1 + %). Untung dihitung dari modal.';
   syncRateInput();
   updateRateUI();
+  renderDiag();
   render();
   refreshRates();
 })();
